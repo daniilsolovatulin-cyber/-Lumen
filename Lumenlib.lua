@@ -112,8 +112,8 @@ __modules["Components/Button"] = function(script, require)
  		Text = "",
  		TextTransparency = 1,
  		Parent = self.Control,
- 	})
- 	Util.Corner(button, Config.Radius.Control)
+	})
+	Util.Corner(button, Config.Radius.Control)
 
  	local holder = Util.Create("Frame", {
  		Name = "Content",
@@ -133,7 +133,7 @@ __modules["Components/Button"] = function(script, require)
  		icon = Icon.new(holder, options.Icon, Config.Icons.SliderSize + 2, "Text")
  	end
 
- 	local label = Util.Create("TextLabel", {
+	local label = Util.Create("TextLabel", {
  		Name = "Label",
  		BackgroundTransparency = 1,
  		Font = Config.Font.Medium,
@@ -311,7 +311,7 @@ __modules["Components/ColorPicker"] = function(script, require)
  		ControlHeight = 24,
  	})
 
- 	local initial = options.Default or Color3.fromRGB(76, 141, 255)
+	local initial = options.Default or Theme.Palette.Accent
  	local hue, saturation, value = Color3.toHSV(initial)
 
  	self.Hue = hue
@@ -347,8 +347,8 @@ __modules["Components/ColorPicker"] = function(script, require)
 
  	local menuHeight = PAD * 2 + SV_HEIGHT + GAP + HUE_HEIGHT + GAP + FIELD_HEIGHT
 
- 	local menu = Util.Create("Frame", {
- 		Name = "ColorMenu",
+	local menu = Util.Create("Frame", {
+		Name = "ColorMenu",
  		BackgroundColor3 = Theme.Palette.Surface,
  		BorderSizePixel = 0,
  		ClipsDescendants = true,
@@ -357,9 +357,10 @@ __modules["Components/ColorPicker"] = function(script, require)
  		ZIndex = 22,
  		Parent = section.Window.Overlay,
  	})
- 	Util.Corner(menu, Config.Radius.Card)
- 	Theme.Bind(menu, "BackgroundColor3", "Surface")
- 	Theme.Bind(Util.Stroke(menu, Theme.Palette.Outline, 1, 0.25), "Color", "Outline")
+	Util.Corner(menu, Config.Radius.Card)
+	Theme.Bind(menu, "BackgroundColor3", "Surface")
+	Theme.Bind(Util.Stroke(menu, Theme.Palette.Outline, 1, 0.25), "Color", "Outline")
+	local menuScale = Util.Create("UIScale", { Scale = 1, Parent = menu })
 
  	local pad = Util.Create("Frame", {
  		Name = "Pad",
@@ -456,9 +457,11 @@ __modules["Components/ColorPicker"] = function(script, require)
  		ColorSequenceKeypoint.new(1, Color3.fromHSV(1, 1, 1)),
  	})
 
- 	local hueBar = Util.Create("Frame", {
- 		Name = "Hue",
- 		BackgroundColor3 = Color3.new(1, 0, 0),
+	local hueBar = Util.Create("Frame", {
+		Name = "Hue",
+		-- UIGradient multiplies its colors by the host color. A red host
+		-- turns the intended spectrum into red / black / red.
+		BackgroundColor3 = Color3.new(1, 1, 1),
  		BorderSizePixel = 0,
  		Position = UDim2.fromOffset(PAD, PAD + SV_HEIGHT + GAP),
  		Size = UDim2.new(1, -(PAD * 2), 0, HUE_HEIGHT),
@@ -575,15 +578,22 @@ __modules["Components/ColorPicker"] = function(script, require)
  	-- Pad and hue dragging
  	-------------------------------------------------------------------------
 
- 	local dragging = nil
- 	local moveConnection = nil
+	local dragging = nil
+	local moveConnection = nil
+	local activeInput = nil
+	local restoreScroll = nil
 
- 	local function stopDragging()
- 		dragging = nil
- 		if moveConnection then
- 			moveConnection:Disconnect()
- 			moveConnection = nil
- 		end
+	local function stopDragging()
+		dragging = nil
+		activeInput = nil
+		if moveConnection then
+			moveConnection:Disconnect()
+			moveConnection = nil
+		end
+		if restoreScroll then
+			restoreScroll()
+			restoreScroll = nil
+		end
  	end
 
  	local function updateFromPad(x, y)
@@ -611,7 +621,14 @@ __modules["Components/ColorPicker"] = function(script, require)
  			return
  		end
 
- 		dragging = "pad"
+		if dragging then
+			stopDragging()
+		end
+		dragging = "pad"
+		activeInput = input
+		if inputType == Enum.UserInputType.Touch then
+			restoreScroll = Util.PauseAncestorScroll(self.Control)
+		end
  		updateFromPad(input.Position.X, input.Position.Y)
 
  		if moveConnection then
@@ -623,7 +640,7 @@ __modules["Components/ColorPicker"] = function(script, require)
  			end
 
  			local movedType = moved.UserInputType
- 			if movedType == Enum.UserInputType.MouseMovement or movedType == Enum.UserInputType.Touch then
+			if movedType == Enum.UserInputType.MouseMovement or (movedType == Enum.UserInputType.Touch and moved == activeInput) then
  				updateFromPad(moved.Position.X, moved.Position.Y)
  			end
  		end)
@@ -635,7 +652,14 @@ __modules["Components/ColorPicker"] = function(script, require)
  			return
  		end
 
- 		dragging = "hue"
+		if dragging then
+			stopDragging()
+		end
+		dragging = "hue"
+		activeInput = input
+		if inputType == Enum.UserInputType.Touch then
+			restoreScroll = Util.PauseAncestorScroll(self.Control)
+		end
  		updateFromHue(input.Position.X)
 
  		if moveConnection then
@@ -647,7 +671,7 @@ __modules["Components/ColorPicker"] = function(script, require)
  			end
 
  			local movedType = moved.UserInputType
- 			if movedType == Enum.UserInputType.MouseMovement or movedType == Enum.UserInputType.Touch then
+			if movedType == Enum.UserInputType.MouseMovement or (movedType == Enum.UserInputType.Touch and moved == activeInput) then
  				updateFromHue(moved.Position.X)
  			end
  		end)
@@ -655,10 +679,12 @@ __modules["Components/ColorPicker"] = function(script, require)
 
  	self.Maid:Add(stopDragging)
 
- 	self.Maid:Add(UserInputService.InputEnded:Connect(function(input)
- 		local inputType = input.UserInputType
- 		if inputType == Enum.UserInputType.MouseButton1 or inputType == Enum.UserInputType.Touch then
- 			stopDragging()
+	self.Maid:Add(UserInputService.InputEnded:Connect(function(input)
+		local inputType = input.UserInputType
+		if activeInput and (input == activeInput
+			or (activeInput.UserInputType == Enum.UserInputType.MouseButton1
+				and inputType == Enum.UserInputType.MouseButton1)) then
+			stopDragging()
  		end
  	end))
 
@@ -680,11 +706,14 @@ __modules["Components/ColorPicker"] = function(script, require)
  		end
 
  		local parsed = fromHex(hexBox.Text)
- 		if parsed then
- 			self:SetValue(parsed)
- 		else
- 			self.render()
- 		end
+		if parsed then
+			self:SetValue(parsed)
+		else
+			-- Restore the last valid value explicitly after focus leaves the box.
+			suppressHex = true
+			hexBox.Text = toHex(self.Value)
+			suppressHex = false
+		end
 
  		if enterPressed then
  			hexBox:ReleaseFocus()
@@ -736,22 +765,25 @@ __modules["Components/ColorPicker"] = function(script, require)
  			return
  		end
 
- 		local window = section.Window.Frame
- 		local control = self.Control
- 		local scale = math.max(0.05, section.Window.Scale.Scale)
- 		local x = (control.AbsolutePosition.X - window.AbsolutePosition.X + control.AbsoluteSize.X) / scale - MENU_WIDTH
- 		local y = (control.AbsolutePosition.Y - window.AbsolutePosition.Y + control.AbsoluteSize.Y) / scale
- 			+ Config.Metrics.PopupGap
- 		local windowSize = Vector2.new(window.AbsoluteSize.X / scale, window.AbsoluteSize.Y / scale)
- 		local margin = Config.Metrics.PopupMargin
+		local window = section.Window.Frame
+		local control = self.Control
+		local scale = math.max(0.05, section.Window.Scale.Scale)
+		local windowSize = Vector2.new(window.AbsoluteSize.X / scale, window.AbsoluteSize.Y / scale)
+		local margin = Config.Metrics.PopupMargin
+		menuScale.Scale = math.min(1, math.max(0.55, (windowSize.Y - margin * 2) / menuHeight))
+		local renderedWidth = MENU_WIDTH * menuScale.Scale
+		local renderedHeight = menuHeight * menuScale.Scale
+		local x = (control.AbsolutePosition.X - window.AbsolutePosition.X + control.AbsoluteSize.X) / scale - renderedWidth
+		local y = (control.AbsolutePosition.Y - window.AbsolutePosition.Y + control.AbsoluteSize.Y) / scale
+			+ Config.Metrics.PopupGap
 
- 		if y + menuHeight > windowSize.Y - margin then
- 			y = (control.AbsolutePosition.Y - window.AbsolutePosition.Y) / scale - menuHeight - Config.Metrics.PopupGap
- 		end
+		if y + renderedHeight > windowSize.Y - margin then
+			y = (control.AbsolutePosition.Y - window.AbsolutePosition.Y) / scale - renderedHeight - Config.Metrics.PopupGap
+		end
 
- 		menu.Position = UDim2.fromOffset(
- 			math.clamp(x, margin, math.max(margin, windowSize.X - MENU_WIDTH - margin)),
- 			math.clamp(y, margin, math.max(margin, windowSize.Y - menuHeight - margin))
+		menu.Position = UDim2.fromOffset(
+			math.clamp(x, margin, math.max(margin, windowSize.X - renderedWidth - margin)),
+			math.clamp(y, margin, math.max(margin, windowSize.Y - renderedHeight - margin))
  		)
  	end
 
@@ -1417,11 +1449,14 @@ __modules["Components/Dropdown"] = function(script, require)
  		local window = section.Window.Frame
  		local control = self.Control
  		local scale = math.max(0.05, section.Window.Scale.Scale)
- 		local x = (control.AbsolutePosition.X - window.AbsolutePosition.X + control.AbsoluteSize.X) / scale - menuWidth
- 		local y = (control.AbsolutePosition.Y - window.AbsolutePosition.Y + control.AbsoluteSize.Y) / scale
- 			+ Config.Metrics.PopupGap
- 		local windowSize = Vector2.new(window.AbsoluteSize.X / scale, window.AbsoluteSize.Y / scale)
- 		local margin = Config.Metrics.PopupMargin
+		local x = (control.AbsolutePosition.X - window.AbsolutePosition.X + control.AbsoluteSize.X) / scale - menuWidth
+		local y = (control.AbsolutePosition.Y - window.AbsolutePosition.Y + control.AbsoluteSize.Y) / scale
+			+ Config.Metrics.PopupGap
+		local windowSize = Vector2.new(window.AbsoluteSize.X / scale, window.AbsoluteSize.Y / scale)
+		local margin = Config.Metrics.PopupMargin
+		menuHeight = math.min(listTop + listHeight + MENU_PADDING, math.max(FIELD_HEIGHT + 24, windowSize.Y - margin * 2))
+		listArea.Size = UDim2.new(1, -(MENU_PADDING * 2), 0, math.max(24, menuHeight - listTop - MENU_PADDING))
+		self.MenuHeight = menuHeight
 
  		if y + menuHeight > windowSize.Y - margin then
  			y = (control.AbsolutePosition.Y - window.AbsolutePosition.Y) / scale - menuHeight - Config.Metrics.PopupGap
@@ -1487,11 +1522,15 @@ __modules["Components/Dropdown"] = function(script, require)
  	end)
 
  	if searchBox then
- 		searchBox:GetPropertyChangedSignal("Text"):Connect(function()
- 			if self.Open then
- 				buildItems(false)
- 				scroll:Refresh()
- 			end
+		searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+			if self.Open then
+				buildItems(false)
+				task.defer(function()
+					if self.Open and not self.Destroyed then
+						scroll:Refresh()
+					end
+				end)
+			end
  		end)
 
  		searchBox.FocusLost:Connect(function(enterPressed)
@@ -2170,9 +2209,15 @@ __modules["Components/Keybind"] = function(script, require)
  local function isBindable(input)
  	local inputType = input.UserInputType
 
- 	if inputType == Enum.UserInputType.Keyboard then
- 		return input.KeyCode ~= NO_KEY
- 	end
+	if inputType == Enum.UserInputType.Keyboard then
+		return input.KeyCode ~= NO_KEY
+	end
+	if inputType == Enum.UserInputType.Touch then
+		return true
+	end
+	if string.find(inputType.Name, "Gamepad", 1, true) == 1 then
+		return input.KeyCode ~= NO_KEY
+	end
 
  	return inputType == Enum.UserInputType.MouseButton1
  		or inputType == Enum.UserInputType.MouseButton2
@@ -2225,17 +2270,36 @@ __modules["Components/Keybind"] = function(script, require)
  		TextYAlignment = Enum.TextYAlignment.Center,
  		Parent = button,
  	})
- 	Theme.Bind(label, "TextColor3", "Text")
+	Theme.Bind(label, "TextColor3", "Text")
 
- 	self.Button = button
- 	self.Stroke = stroke
+	self.Button = button
+	local cancelButton = Util.Create("TextButton", {
+		Name = "CancelCapture",
+		AnchorPoint = Vector2.new(1, 0.5),
+		AutoButtonColor = false,
+		BackgroundColor3 = Theme.Palette.ControlHover,
+		BorderSizePixel = 0,
+		Position = UDim2.new(1, 0, 0.5, 0),
+		Size = UDim2.fromOffset(24, Config.Metrics.ControlHeight),
+		Text = "×",
+		TextSize = 18,
+		Visible = false,
+		Parent = self.Control,
+	})
+	Util.Corner(cancelButton, Config.Radius.Control)
+	Theme.Bind(cancelButton, "BackgroundColor3", "ControlHover")
+	Theme.Bind(cancelButton, "TextColor3", "Text")
+	self.Stroke = stroke
  	self.Label = label
  	self.Icon = icon
 
  	local pulsing = false
 
- 	local function render()
- 		label.Text = self.Listening and "Press a key" or Util.KeyName(self.Value)
+	local function render()
+		label.Text = self.Listening and "Press a key" or Util.KeyName(self.Value)
+		cancelButton.Visible = self.Listening
+		button.Size = self.Listening and UDim2.new(1, -28, 1, 0) or UDim2.fromScale(1, 1)
+		button.Position = self.Listening and UDim2.new(0.5, -14, 0.5, 0) or UDim2.fromScale(0.5, 0.5)
 
  		if self.Listening then
  			Theme.Bind(stroke, "Color", "Accent")
@@ -2270,14 +2334,17 @@ __modules["Components/Keybind"] = function(script, require)
  		render()
  	end
 
- 	function self.stopListening()
- 		if not self.Listening then
- 			return
+	function self.stopListening()
+		if not self.Listening then
+			return
  		end
 
- 		self.Listening = false
- 		render()
- 	end
+		self.Listening = false
+		render()
+	end
+	cancelButton.MouseButton1Click:Connect(function()
+		self.stopListening()
+	end)
 
  	button.MouseButton1Click:Connect(function()
  		if not self.Enabled then
@@ -2296,15 +2363,14 @@ __modules["Components/Keybind"] = function(script, require)
  			return
  		end
 
- 		if
- 			input.UserInputType == Enum.UserInputType.MouseButton1
- 			and Util.IsInside(button, Vector2.new(input.Position.X, input.Position.Y))
- 		then
+		if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch)
+			and (Util.IsInside(button, Vector2.new(input.Position.X, input.Position.Y))
+				or Util.IsInside(cancelButton, Vector2.new(input.Position.X, input.Position.Y))) then
  			-- Clicking the button toggles listening instead of binding.
  			return
  		end
 
- 		if input.KeyCode == Enum.KeyCode.Escape then
+		if input.KeyCode == Enum.KeyCode.Escape or input.KeyCode == Enum.KeyCode.ButtonB then
  			self.stopListening()
  			return
  		end
@@ -2321,7 +2387,9 @@ __modules["Components/Keybind"] = function(script, require)
 
  		self.Listening = false
 
- 		local value = input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode or input.UserInputType
+		local kind = input.UserInputType
+		local value = (kind == Enum.UserInputType.Keyboard or string.find(kind.Name, "Gamepad", 1, true) == 1)
+			and input.KeyCode or kind
  		self:SetValue(value)
  	end))
 
@@ -2412,8 +2480,9 @@ __modules["Components/Notification"] = function(script, require)
  	self.Window = window
  	self.Maid = Maid.new()
  	self.Active = {}
- 	self.Transitions = {}
- 	self.Count = 0
+	self.Transitions = {}
+	self.Count = 0
+	self.Width = math.min(WIDTH, math.max(180, window:GetViewportSize().X - 32))
 
  	local container = Util.Create("Frame", {
  		Name = "Notifications",
@@ -2421,7 +2490,7 @@ __modules["Components/Notification"] = function(script, require)
  		BackgroundTransparency = 1,
  		BorderSizePixel = 0,
  		Position = UDim2.new(1, -16, 1, -16),
- 		Size = UDim2.fromOffset(WIDTH, 0),
+		Size = UDim2.fromOffset(self.Width, 0),
  		ZIndex = 40,
  		Parent = window.ScreenGui,
  	})
@@ -2514,17 +2583,16 @@ __modules["Components/Notification"] = function(script, require)
  	end
 
  	local content = nil
- 	local contentWidth = WIDTH - (ICON_OFFSET + PADDING + 6)
+	local contentWidth = self.Width - (ICON_OFFSET + PADDING + 6)
 
  	if options.Content then
  		content = Util.Create("TextLabel", {
  			Name = "Content",
  			BackgroundTransparency = 1,
  			Font = Config.Font.Regular,
- 			Position = UDim2.fromOffset(ICON_OFFSET + 6, cursor),
- 			Size = UDim2.new(1, -(ICON_OFFSET + PADDING + 6), 0, 0),
- 			AutomaticSize = Enum.AutomaticSize.Y,
- 			Text = tostring(options.Content),
+			Position = UDim2.fromOffset(ICON_OFFSET + 6, cursor),
+			Size = UDim2.new(1, -(ICON_OFFSET + PADDING + 6), 0, 0),
+			Text = tostring(options.Content),
  			TextSize = Config.TextSize.Body,
  			TextWrapped = true,
  			TextXAlignment = Enum.TextXAlignment.Left,
@@ -2720,9 +2788,12 @@ __modules["Components/Paragraph"] = function(script, require)
  		self:RefreshHeight()
  	end))
 
- 	task.defer(function()
- 		self:RefreshHeight()
- 	end)
+	task.defer(function()
+		if self.Destroyed then
+			return
+		end
+		self:RefreshHeight()
+	end)
 
  	return self
  end
@@ -2856,7 +2927,20 @@ __modules["Components/Section"] = function(script, require)
  			TextTruncate = Enum.TextTruncate.AtEnd,
  			Parent = header,
  		})
- 		Theme.Bind(label, "TextColor3", "TextMuted")
+	Theme.Bind(label, "TextColor3", "TextMuted")
+	local compactLetter = Util.Create("TextLabel", {
+		Name = "CompactLetter",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		BackgroundTransparency = 1,
+		Font = Config.Font.Bold,
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(28, 28),
+		Text = string.upper(string.sub(self.Name, 1, 1)),
+		TextSize = Config.TextSize.Tab,
+		Visible = false,
+		Parent = content,
+	})
+	Theme.Bind(compactLetter, "TextColor3", "TextMuted")
 
  		local chevron = Icon.new(header, "chevron-down", Config.Icons.ChevronSize, "TextDim")
  		chevron.Container.AnchorPoint = Vector2.new(1, 0.5)
@@ -3091,9 +3175,10 @@ __modules["Components/Section"] = function(script, require)
  		self.Chevron = nil
  	end
 
- 	if self.Frame then
- 		Motion.CancelTree(self.Frame)
- 		self.Frame:Destroy()
+	if self.Frame then
+		Motion.CancelTree(self.Frame)
+		Theme.UnbindTree(self.Frame)
+		self.Frame:Destroy()
  		self.Frame = nil
  	end
 
@@ -3362,25 +3447,32 @@ __modules["Components/Slider"] = function(script, require)
  		return Util.Clamp(value, self.Min, self.Max)
  	end
 
- 	local function valueFromPointer(x)
- 		local alpha = Util.Clamp((x - hit.AbsolutePosition.X) / math.max(1, hit.AbsoluteSize.X), 0, 1)
- 		return snap(self.Min + (self.Max - self.Min) * alpha)
- 	end
+	local function valueFromPointer(x)
+		local alpha = Util.Clamp((x - hit.AbsolutePosition.X) / math.max(1, hit.AbsoluteSize.X), 0, 1)
+		return snap(self.Min + (self.Max - self.Min) * alpha)
+	end
 
- 	local dragging = false
- 	local moveConnection = nil
+	local dragging = false
+	local moveConnection = nil
+	local activeInput = nil
+	local restoreScroll = nil
 
  	local function stopDragging()
  		if not dragging then
  			return
  		end
 
- 		dragging = false
+		dragging = false
+		activeInput = nil
 
- 		if moveConnection then
- 			moveConnection:Disconnect()
- 			moveConnection = nil
- 		end
+		if moveConnection then
+			moveConnection:Disconnect()
+			moveConnection = nil
+		end
+		if restoreScroll then
+			restoreScroll()
+			restoreScroll = nil
+		end
 
  		setBubble(false)
  		if self.Destroyed then
@@ -3394,9 +3486,9 @@ __modules["Components/Slider"] = function(script, require)
  		})
  	end
 
- 	hit.InputBegan:Connect(function(input)
- 		if not self.Enabled then
- 			return
+	hit.InputBegan:Connect(function(input)
+		if not self.Enabled then
+			return
  		end
 
  		local inputType = input.UserInputType
@@ -3404,8 +3496,15 @@ __modules["Components/Slider"] = function(script, require)
  			return
  		end
 
- 		dragging = true
- 		self:SetValue(valueFromPointer(input.Position.X))
+		if dragging then
+			stopDragging()
+		end
+		dragging = true
+		activeInput = input
+		if inputType == Enum.UserInputType.Touch then
+			restoreScroll = Util.PauseAncestorScroll(hit)
+		end
+		self:SetValue(valueFromPointer(input.Position.X))
  		setBubble(true)
 
  		Motion.Spring(self, "KnobScale", 1.35, {
@@ -3417,32 +3516,34 @@ __modules["Components/Slider"] = function(script, require)
  		if moveConnection then
  			moveConnection:Disconnect()
  		end
- 		moveConnection = UserInputService.InputChanged:Connect(function(moved)
- 			if not dragging then
- 				return
- 			end
+		moveConnection = UserInputService.InputChanged:Connect(function(moved)
+			if not dragging then
+				return
+			end
 
- 			local movedType = moved.UserInputType
- 			if movedType == Enum.UserInputType.MouseMovement or movedType == Enum.UserInputType.Touch then
- 				self:SetValue(valueFromPointer(moved.Position.X))
- 			end
- 		end)
- 	end)
+			local movedType = moved.UserInputType
+			if movedType == Enum.UserInputType.MouseMovement or (movedType == Enum.UserInputType.Touch and moved == activeInput) then
+				self:SetValue(valueFromPointer(moved.Position.X))
+			end
+		end)
+	end)
 
- 	hit.InputEnded:Connect(function(input)
- 		local inputType = input.UserInputType
- 		if inputType == Enum.UserInputType.MouseButton1 or inputType == Enum.UserInputType.Touch then
- 			stopDragging()
+	hit.InputEnded:Connect(function(input)
+		if activeInput and (input == activeInput
+			or (activeInput.UserInputType == Enum.UserInputType.MouseButton1
+				and input.UserInputType == Enum.UserInputType.MouseButton1)) then
+			stopDragging()
  		end
  	end)
 
  	-- InputEnded on the hit target does not fire when the pointer is released
  	-- outside the row (especially on touch). The service-level listener closes
  	-- the temporary move connection deterministically.
- 	self.Maid:Add(UserInputService.InputEnded:Connect(function(input)
- 		local inputType = input.UserInputType
- 		if inputType == Enum.UserInputType.MouseButton1 or inputType == Enum.UserInputType.Touch then
- 			stopDragging()
+	self.Maid:Add(UserInputService.InputEnded:Connect(function(input)
+		if activeInput and (input == activeInput
+			or (activeInput.UserInputType == Enum.UserInputType.MouseButton1
+				and input.UserInputType == Enum.UserInputType.MouseButton1)) then
+			stopDragging()
  		end
  	end))
 
@@ -3541,8 +3642,8 @@ __modules["Components/Tab"] = function(script, require)
  	self.Maid = Maid.new()
  	self.Active = false
 
- 	local button = Util.Create("TextButton", {
- 		Name = "TabButton",
+	local button = Util.Create("TextButton", {
+		Name = "TabButton",
  		AutoButtonColor = false,
  		BackgroundColor3 = Theme.Palette.Window,
  		BackgroundTransparency = 1,
@@ -3552,8 +3653,10 @@ __modules["Components/Tab"] = function(script, require)
  		Text = "",
  		TextTransparency = 1,
  		Parent = window.TabList,
- 	})
- 	Util.Corner(button, Config.Radius.Control)
+	})
+	Util.Corner(button, Config.Radius.Control)
+	local dragStroke = Util.Stroke(button, Theme.Palette.Accent, 1.5, 1)
+	Theme.Bind(dragStroke, "Color", "Accent")
 
  	-- Content slides slightly on hover; the button itself stays put.
  	local content = Util.Create("Frame", {
@@ -3624,7 +3727,8 @@ __modules["Components/Tab"] = function(script, require)
 
  	self.Button = button
  	self.Icon = icon
- 	self.Label = label
+	self.Label = label
+	self.CompactLetter = compactLetter
  	self.Content = content
  	self.Page = page
  	self.Scroll = scroll
@@ -3672,8 +3776,9 @@ __modules["Components/Tab"] = function(script, require)
  			})
  		end
 
- 		Theme.Bind(label, "TextColor3", labelKey)
- 		setIconColor(labelKey)
+		Theme.Bind(label, "TextColor3", labelKey)
+		Theme.Bind(compactLetter, "TextColor3", labelKey)
+		setIconColor(labelKey)
 
  		if icon and not isGlyphIcon() then
  			Util.Tween(icon, { ImageTransparency = selected and 0 or 0.15 }, Util.Easing.Fast)
@@ -3701,15 +3806,59 @@ __modules["Components/Tab"] = function(script, require)
  		paint()
  	end)
 
- 	button.MouseButton1Click:Connect(function()
- 		self.Window:SelectTab(self)
- 	end)
+	local suppressClickUntil = 0
+	button.MouseButton1Click:Connect(function()
+		if os.clock() < suppressClickUntil then
+			return
+		end
+		self.Window:SelectTab(self)
+	end)
 
  	-- Holding a tab and moving it vertically reorders the sidebar. A small
  	-- threshold preserves normal click-to-select behaviour.
- 	local held = false
- 	local dragging = false
- 	local originY = 0
+	local held = false
+	local dragging = false
+	local originY = 0
+	local heldInput = nil
+	local previousScrolling = nil
+	local moveConnection = nil
+	local touchMoved = false
+
+	local function startDrag()
+		if not held or dragging then
+			return
+		end
+		dragging = true
+		suppressClickUntil = math.huge
+		if self.Window.TabList then
+			previousScrolling = self.Window.TabList.ScrollingEnabled
+			self.Window.TabList.ScrollingEnabled = false
+		end
+		Motion.Spring(button, "BackgroundTransparency", 0.12, {
+			Stiffness = Config.Motion.Hover.Stiffness,
+			Damping = Config.Motion.Hover.Damping,
+		})
+		Motion.Spring(dragStroke, "Transparency", 0.08, { Stiffness = 620, Damping = 42 })
+	end
+
+	local function stopDrag()
+		held = false
+		heldInput = nil
+		if moveConnection then
+			moveConnection:Disconnect()
+			moveConnection = nil
+		end
+		if previousScrolling ~= nil and self.Window.TabList then
+			self.Window.TabList.ScrollingEnabled = previousScrolling
+			previousScrolling = nil
+		end
+		if dragging then
+			dragging = false
+			suppressClickUntil = os.clock() + 0.15
+			Motion.Spring(dragStroke, "Transparency", 1, { Stiffness = 620, Damping = 42 })
+			paint()
+		end
+	end
 
  	local function nearestTabIndex(pointerY)
  		local nearest = 1
@@ -3729,41 +3878,68 @@ __modules["Components/Tab"] = function(script, require)
  		return nearest
  	end
 
- 	self.Maid:Add(button.InputBegan:Connect(function(input)
- 		local kind = input.UserInputType
- 		if kind == Enum.UserInputType.MouseButton1 or kind == Enum.UserInputType.Touch then
- 			held = true
- 			dragging = false
- 			originY = input.Position.Y
- 		end
- 	end))
+	self.Maid:Add(button.InputBegan:Connect(function(input)
+		local kind = input.UserInputType
+		if kind == Enum.UserInputType.MouseButton1 or kind == Enum.UserInputType.Touch then
+			stopDrag()
+			held = true
+			dragging = false
+			heldInput = input
+			touchMoved = false
+			originY = input.Position.Y
+			if kind == Enum.UserInputType.Touch then
+				task.delay(0.28, function()
+					if held and heldInput == input and not touchMoved and not self.Window.Destroyed then
+						startDrag()
+					end
+				end)
+			end
+			moveConnection = UserInputService.InputChanged:Connect(function(moved)
+				if not held then
+					return
+				end
+				local movedKind = moved.UserInputType
+				if kind == Enum.UserInputType.Touch then
+					if moved ~= heldInput then
+						return
+					end
+				elseif movedKind ~= Enum.UserInputType.MouseMovement then
+					return
+				end
+				local distance = math.abs(moved.Position.Y - originY)
+				if not dragging and kind == Enum.UserInputType.Touch and distance >= 8 then
+					touchMoved = true
+					return
+				end
+				if not dragging and distance >= 6 then
+					startDrag()
+				end
+				if dragging then
+					local tabList = self.Window.TabList
+					if tabList then
+						local edge = 24
+						local localY = moved.Position.Y - tabList.AbsolutePosition.Y
+						local direction = localY < edge and -1 or (localY > tabList.AbsoluteSize.Y - edge and 1 or 0)
+						if direction ~= 0 then
+							local maximum = math.max(0, tabList.AbsoluteCanvasSize.Y - tabList.AbsoluteSize.Y)
+							tabList.CanvasPosition = Vector2.new(0, math.clamp(tabList.CanvasPosition.Y + direction * 12, 0, maximum))
+						end
+					end
+					self.Window:MoveTab(self, nearestTabIndex(moved.Position.Y))
+				end
+			end)
+		end
+	end))
 
- 	self.Maid:Add(UserInputService.InputChanged:Connect(function(input)
- 		if not held then
- 			return
- 		end
-
- 		local kind = input.UserInputType
- 		if kind ~= Enum.UserInputType.MouseMovement and kind ~= Enum.UserInputType.Touch then
- 			return
- 		end
-
- 		if not dragging and math.abs(input.Position.Y - originY) >= 6 then
- 			dragging = true
- 		end
-
- 		if dragging then
- 			self.Window:MoveTab(self, nearestTabIndex(input.Position.Y))
- 		end
- 	end))
-
- 	self.Maid:Add(UserInputService.InputEnded:Connect(function(input)
- 		local kind = input.UserInputType
- 		if kind == Enum.UserInputType.MouseButton1 or kind == Enum.UserInputType.Touch then
- 			held = false
- 			dragging = false
- 		end
- 	end))
+	self.Maid:Add(UserInputService.InputEnded:Connect(function(input)
+		local kind = input.UserInputType
+		if heldInput and ((kind == Enum.UserInputType.MouseButton1
+			and heldInput.UserInputType == Enum.UserInputType.MouseButton1)
+			or (kind == Enum.UserInputType.Touch and heldInput == input)) then
+			stopDrag()
+		end
+	end))
+	self.Maid:Add(stopDrag)
 
  	self.Maid:Add(Theme.Changed:Connect(paint))
 
@@ -3779,8 +3955,9 @@ __modules["Components/Tab"] = function(script, require)
  		return
  	end
 
- 	self.Compact = compact
- 	self.Label.Visible = not compact
+	self.Compact = compact
+	self.Label.Visible = not compact
+	self.CompactLetter.Visible = compact and self.Icon == nil
 
  	if self.Icon then
  		local container = typeof(self.Icon) == "table" and self.Icon.Container or self.Icon
@@ -3917,9 +4094,11 @@ __modules["Components/Tab"] = function(script, require)
  		self.Icon:Destroy()
  	end
 
- 	Motion.CancelTree(self.Page)
- 	Motion.CancelTree(self.Button)
- 	self.Page:Destroy()
+	Motion.CancelTree(self.Page)
+	Motion.CancelTree(self.Button)
+	Theme.UnbindTree(self.Page)
+	Theme.UnbindTree(self.Button)
+	self.Page:Destroy()
  	self.Button:Destroy()
  end
 
@@ -4316,7 +4495,8 @@ __modules["Components/Window"] = function(script, require)
  	area, popup overlay, resize grip, tooltips and the notification stack.
  ]]
 
- local Players = game:GetService("Players")
+	local Players = game:GetService("Players")
+	local UserInputService = game:GetService("UserInputService")
 
  local Config = require(script.Parent.Parent.Core.Config)
  local Effects = require(script.Parent.Parent.Core.Effects)
@@ -4363,7 +4543,8 @@ __modules["Components/Window"] = function(script, require)
  		screenGui = Util.Create("ScreenGui", {
  			Name = options.Name or "Lumen",
  			DisplayOrder = options.DisplayOrder or 100,
- 			IgnoreGuiInset = true,
+			IgnoreGuiInset = false,
+			ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets,
  			ResetOnSpawn = false,
  			ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
  			Parent = parent,
@@ -4374,7 +4555,13 @@ __modules["Components/Window"] = function(script, require)
  	local metrics = Config.Window
  	local initialScale = math.clamp(options.Scale or 1, 0.5, 2)
  	local camera = workspace.CurrentCamera
- 	local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
+	local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
+	local safeRect = game:GetService("GuiService"):GetInsetArea(Enum.ScreenInsets.CoreUISafeInsets)
+	local safeSize = safeRect.Max - safeRect.Min
+	if safeSize.X > 0 and safeSize.Y > 0 then
+		viewport = safeSize
+	end
+	initialScale = math.min(initialScale, math.max(0.5, (viewport.X - Config.Metrics.ViewportMargin * 2) / 320))
  	local available = Vector2.new(
  		(viewport.X - Config.Metrics.ViewportMargin * 2) / initialScale,
  		(viewport.Y - Config.Metrics.ViewportMargin * 2) / initialScale
@@ -4386,10 +4573,14 @@ __modules["Components/Window"] = function(script, require)
  	local minimum = Vector2.new(math.min(metrics.MinWidth, maximum.X), math.min(metrics.MinHeight, maximum.Y))
  	local width = math.clamp(options.Size and options.Size.X or metrics.Width, minimum.X, maximum.X)
  	local height = math.clamp(options.Size and options.Size.Y or metrics.Height, minimum.Y, maximum.Y)
- 	local origin = Vector2.new(
- 		math.floor(math.max(0, (viewport.X - width) / 2)),
- 		math.floor(math.max(0, (viewport.Y - height) / 2))
- 	)
+	if viewport.X <= 600 then
+		width = maximum.X
+		height = math.min(maximum.Y, math.max(height, viewport.Y / initialScale - Config.Metrics.ViewportMargin * 2))
+	end
+	local origin = Vector2.new(
+		math.floor(math.max(0, (viewport.X / initialScale - width) / 2)),
+		math.floor(math.max(0, (viewport.Y / initialScale - height) / 2))
+	)
 
  	-- This layer is reparented into the shell below. Keeping it local prevents a
  	-- window's backdrop setting from dimming the game world or another GUI.
@@ -4536,7 +4727,7 @@ __modules["Components/Window"] = function(script, require)
  	Util.Corner(mark, Config.Radius.Small + 2)
  	Theme.Bind(mark, "BackgroundColor3", "AccentSoft")
 
- 	local markIcon = Icon.new(mark, options.Mark or "sparkles", Config.Icons.BrandSize, "Accent")
+	local markIcon = Icon.new(mark, options.Mark or "lumen_mark", Config.Icons.BrandSize, "Accent")
  	markIcon.Container.AnchorPoint = Vector2.new(0.5, 0.5)
  	markIcon.Container.Position = UDim2.fromScale(0.5, 0.5)
  	self.Mark = markIcon
@@ -4544,7 +4735,7 @@ __modules["Components/Window"] = function(script, require)
  	local titleLabel = Util.Create("TextLabel", {
  		Name = "Title",
  		BackgroundTransparency = 1,
- 		Font = Config.Font.Bold,
+		Font = Config.Font.Medium,
  		Size = UDim2.new(0, 0, 0, 18),
  		AutomaticSize = Enum.AutomaticSize.X,
  		Text = options.Title or "Lumen",
@@ -4568,13 +4759,14 @@ __modules["Components/Window"] = function(script, require)
  	})
  	Theme.Bind(subtitleLabel, "TextColor3", "TextMuted")
 
- 	local controls = Util.Create("Frame", {
+	local touchTargets = UserInputService.TouchEnabled
+	local controls = Util.Create("Frame", {
  		Name = "Controls",
  		AnchorPoint = Vector2.new(1, 0.5),
  		BackgroundTransparency = 1,
  		BorderSizePixel = 0,
  		Position = UDim2.new(1, -10, 0.5, 0),
- 		Size = UDim2.new(0, 74, 0, 28),
+		Size = UDim2.fromOffset(touchTargets and 90 or 74, touchTargets and 36 or 28),
  		ZIndex = 2,
  		Parent = topbar,
  	})
@@ -4590,7 +4782,7 @@ __modules["Components/Window"] = function(script, require)
  			BackgroundTransparency = 1,
  			BorderSizePixel = 0,
  			ClipsDescendants = true,
- 			Size = UDim2.fromOffset(34, 26),
+			Size = UDim2.fromOffset(touchTargets and 42 or 34, touchTargets and 34 or 26),
  			Text = "",
  			TextTransparency = 1,
  			ZIndex = 2,
@@ -4602,8 +4794,7 @@ __modules["Components/Window"] = function(script, require)
  		icon.Container.AnchorPoint = Vector2.new(0.5, 0.5)
  		icon.Container.Position = UDim2.fromScale(0.5, 0.5)
 
- 		local sheen = Effects.Sheen(button, { Color = Theme.Palette.Text, ZIndex = 4 })
- 		local hovered = false
+		local hovered = false
 
  		local function paint()
  			icon:SetColor(hovered and hoverKey or "TextMuted")
@@ -4614,32 +4805,37 @@ __modules["Components/Window"] = function(script, require)
  			})
  		end
 
- 		button.MouseEnter:Connect(function()
- 			hovered = true
- 			paint()
- 			sheen.Play()
- 		end)
+		button.MouseEnter:Connect(function()
+			hovered = true
+			paint()
+		end)
 
  		button.MouseLeave:Connect(function()
  			hovered = false
  			paint()
  		end)
 
- 		button.InputBegan:Connect(function(input)
- 			local inputType = input.UserInputType
- 			if inputType == Enum.UserInputType.MouseButton1 or inputType == Enum.UserInputType.Touch then
- 				Motion.Spring(button, "BackgroundTransparency", 0.08, { Stiffness = 900, Damping = 40 })
- 			end
- 		end)
+		button.InputBegan:Connect(function(input)
+			local inputType = input.UserInputType
+			if inputType == Enum.UserInputType.MouseButton1 or inputType == Enum.UserInputType.Touch then
+				Motion.Spring(button, "BackgroundTransparency", 0.08, { Stiffness = 900, Damping = 40 })
+			end
+		end)
+		button.InputEnded:Connect(function(input)
+			local inputType = input.UserInputType
+			if inputType == Enum.UserInputType.MouseButton1 or inputType == Enum.UserInputType.Touch then
+				paint()
+			end
+		end)
 
  		self.Maid:Add(Theme.Changed:Connect(paint))
  		paint()
 
- 		return button
- 	end
+		return button, icon
+	end
 
- 	local minimizeButton = createControlButton("Minimize", "minus", "Text")
- 	local closeButton = createControlButton("Close", "x", "Error")
+	local minimizeButton, minimizeIcon = createControlButton("Minimize", "minus", "Text")
+	local closeButton = createControlButton("Close", "x", "Error")
 
  	if options.Minimizable == false then
  		minimizeButton.Visible = false
@@ -4777,7 +4973,7 @@ __modules["Components/Window"] = function(script, require)
  		BackgroundTransparency = 1,
  		BorderSizePixel = 0,
  		Position = UDim2.new(1, -2, 1, -2),
- 		Size = UDim2.fromOffset(16, 16),
+		Size = UDim2.fromOffset(touchTargets and 30 or 16, touchTargets and 30 or 16),
  		ZIndex = 21,
  		Visible = options.Resizable ~= false,
  		Parent = window,
@@ -4835,16 +5031,33 @@ __modules["Components/Window"] = function(script, require)
  	self.Scale = scale
  	self.Blur = nil -- Kept for backwards compatibility; this is now a local GUI effect.
  	self.ActivePopup = nil
- 	self.Frame = window
+	self.Frame = window
+	self.MinimizeIcon = minimizeIcon
  	self.ShellSurface = shellSurface
  	self.Topbar = topbar
- 	self.Sidebar = sidebar
+	self.Sidebar = sidebar
+	self.TabList = tabList
  	self.TabList = tabList
  	self.Indicator = indicator
  	self.Content = content
- 	self.ContentSurface = contentSurface
- 	self.Overlay = overlay
- 	self.SidebarWidth = metrics.SidebarWidth
+	self.ContentSurface = contentSurface
+	self.Overlay = overlay
+	self.SidebarWidth = metrics.SidebarWidth
+
+	local function refreshHeading()
+		local compact = window.Size.X.Offset <= 420
+		local available = math.max(72, window.Size.X.Offset - controls.Size.X.Offset - 72)
+		local titleWidth = math.min(available, Util.MeasureText(titleLabel.Text, Config.TextSize.Title, Config.Font.Medium) + 2)
+		local subtitleWidth = Util.MeasureText(subtitleLabel.Text, Config.TextSize.Subtitle, Config.Font.Regular)
+		subtitleLabel.Visible = not compact and subtitleLabel.Text ~= ""
+			and titleWidth + subtitleWidth + 8 <= available
+		titleLabel.AutomaticSize = Enum.AutomaticSize.None
+		titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
+		titleLabel.Size = UDim2.fromOffset(titleWidth, 18)
+	end
+	self.Maid:Add(window:GetPropertyChangedSignal("Size"):Connect(refreshHeading))
+	self.RefreshHeading = refreshHeading
+	refreshHeading()
 
  	self.Tooltip = Tooltip.new(self)
  	self.Notifications = Notification.new(self)
@@ -4858,10 +5071,19 @@ __modules["Components/Window"] = function(script, require)
  	end
 
  	if options.Draggable ~= false then
- 		self.Maid:Add(Util.AttachDrag(window, topbar, {
- 			Scale = function()
- 				return scale.Scale
- 			end,
+		self.Maid:Add(Util.AttachDrag(window, topbar, {
+			Scale = function()
+				return scale.Scale
+			end,
+			ViewportSize = function()
+				return self:GetViewportSize()
+			end,
+			KeepFullyVisible = function()
+				return self:GetViewportSize().X <= 600
+			end,
+			Ignore = function(point)
+				return Util.IsInside(controls, point)
+			end,
  			TitlebarHeight = metrics.TopbarHeight,
  			MinimumVisibleTitlebar = metrics.MinimumVisibleTitlebar,
  			OnDragStart = function()
@@ -4929,10 +5151,13 @@ __modules["Components/Window"] = function(script, require)
  			viewportConnection:Disconnect()
  		end
  	end)
- 	if workspace.GetPropertyChangedSignal then
- 		self.Maid:Add(workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(watchViewport))
- 	end
- 	watchViewport()
+	if workspace.GetPropertyChangedSignal then
+		self.Maid:Add(workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(watchViewport))
+	end
+	self.Maid:Add(root:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		self:ClampToViewport()
+	end))
+	watchViewport()
 
  	minimizeButton.MouseButton1Click:Connect(function()
  		self:ToggleMinimize()
@@ -5039,10 +5264,10 @@ __modules["Components/Window"] = function(script, require)
  		return
  	end
 
- 	Motion.Curve(indicator, "Position", target, {
- 		Curve = "Swift",
- 		Duration = 0.22,
- 	})
+	Motion.Spring(indicator, "Position", target, {
+		Stiffness = Config.Motion.Indicator.Stiffness,
+		Damping = Config.Motion.Indicator.Damping,
+	})
  end
 
  --- Reorders the tab model and its UIListLayout children after a tab drag.
@@ -5072,16 +5297,30 @@ __modules["Components/Window"] = function(script, require)
  -- Geometry and popup coordination
  ---------------------------------------------------------------------------
 
- function Window:GetMaximumSize()
- 	local camera = workspace.CurrentCamera
- 	local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
- 	local scale = math.max(0.05, self.Scale.Scale)
- 	local margin = Config.Metrics.ViewportMargin
- 	return Vector2.new(
- 		math.max(1, math.min(Config.Window.MaxWidth, viewport.X / scale - margin * 2)),
- 		math.max(Config.Window.TopbarHeight, math.min(Config.Window.MaxHeight, viewport.Y / scale - margin * 2))
- 	)
- end
+function Window:GetViewportSize()
+	local guiService = game:GetService("GuiService")
+	local ok, rect = pcall(function()
+		return guiService:GetInsetArea(self.ScreenGui.ScreenInsets)
+	end)
+	if ok then
+		local size = rect.Max - rect.Min
+		if size.X > 0 and size.Y > 0 then
+			return size
+		end
+	end
+	local camera = workspace.CurrentCamera
+	return camera and camera.ViewportSize or Vector2.new(1280, 720)
+end
+
+function Window:GetMaximumSize()
+	local viewport = self:GetViewportSize()
+	local scale = math.max(0.05, self.Scale.Scale)
+	local margin = Config.Metrics.ViewportMargin
+	return Vector2.new(
+		math.max(1, math.min(Config.Window.MaxWidth, (viewport.X - margin * 2) / scale)),
+		math.max(Config.Window.TopbarHeight, math.min(Config.Window.MaxHeight, (viewport.Y - margin * 2) / scale))
+	)
+end
 
  --- Keeps the shell usable when scale, size or viewport changes.
  function Window:ClampToViewport()
@@ -5092,20 +5331,35 @@ __modules["Components/Window"] = function(script, require)
  	local maximum = self:GetMaximumSize()
  	local minimum =
  		Vector2.new(math.min(Config.Window.MinWidth, maximum.X), math.min(Config.Window.MinHeight, maximum.Y))
- 	local size = Vector2.new(self.Frame.Size.X.Offset, self.Frame.Size.Y.Offset)
- 	if not self.Minimized then
- 		size = Vector2.new(math.clamp(size.X, minimum.X, maximum.X), math.clamp(size.Y, minimum.Y, maximum.Y))
- 		self.Frame.Size = UDim2.fromOffset(size.X, size.Y)
- 	end
+	local size = Vector2.new(self.Frame.Size.X.Offset, self.Frame.Size.Y.Offset)
+	if self.RestoredSize then
+		self.RestoredSize = Vector2.new(
+			math.clamp(self.RestoredSize.X, minimum.X, maximum.X),
+			math.clamp(self.RestoredSize.Y, minimum.Y, maximum.Y)
+		)
+	end
+	if not self.Minimized then
+		size = Vector2.new(math.clamp(size.X, minimum.X, maximum.X), math.clamp(size.Y, minimum.Y, maximum.Y))
+		if not Motion.IsActive(self.Frame, "Size") then
+			self.Frame.Size = UDim2.fromOffset(size.X, size.Y)
+		end
+	elseif self.RestoredSize and not Motion.IsActive(self.Frame, "Size") then
+		size = Vector2.new(self.RestoredSize.X, Config.Window.TopbarHeight)
+		self.Frame.Size = UDim2.fromOffset(size.X, size.Y)
+	end
 
- 	local camera = workspace.CurrentCamera
- 	local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
+	local viewport = self:GetViewportSize()
  	local scale = math.max(0.05, self.Scale.Scale)
  	local baseViewport = Vector2.new(viewport.X / scale, viewport.Y / scale)
- 	local visible = math.min(size.X, Config.Window.MinimumVisibleTitlebar)
- 	local x =
- 		math.clamp(self.Frame.Position.X.Offset, visible - size.X, math.max(visible - size.X, baseViewport.X - visible))
- 	local y = math.clamp(self.Frame.Position.Y.Offset, 0, math.max(0, baseViewport.Y - Config.Window.TopbarHeight))
+	local visible = math.min(size.X, Config.Window.MinimumVisibleTitlebar)
+	local compactViewport = viewport.X <= 600
+	local minimumX = compactViewport and 0 or visible - size.X
+	local maximumX = compactViewport and math.max(0, baseViewport.X - size.X)
+		or math.max(visible - size.X, baseViewport.X - visible)
+	local x = math.clamp(self.Frame.Position.X.Offset, minimumX, maximumX)
+	local maximumY = compactViewport and math.max(0, baseViewport.Y - size.Y)
+		or math.max(0, baseViewport.Y - Config.Window.TopbarHeight)
+	local y = math.clamp(self.Frame.Position.Y.Offset, 0, maximumY)
  	self.Frame.Position = UDim2.fromOffset(x, y)
  	self:RefreshSidebarLayout()
  end
@@ -5166,14 +5420,15 @@ __modules["Components/Window"] = function(script, require)
  -- Chrome
  ---------------------------------------------------------------------------
 
- function Window:SetTitle(text)
- 	self.Topbar.Heading.Title.Text = tostring(text)
+function Window:SetTitle(text)
+	self.Topbar.Heading.Title.Text = tostring(text)
+	self.RefreshHeading()
  end
 
  function Window:SetSubtitle(text)
  	local label = self.Topbar.Heading.Subtitle
- 	label.Text = text == nil and "" or tostring(text)
- 	label.Visible = text ~= nil and text ~= ""
+	label.Text = text == nil and "" or tostring(text)
+	self.RefreshHeading()
  end
 
  function Window:SetAccentColor(color)
@@ -5205,56 +5460,90 @@ __modules["Components/Window"] = function(script, require)
  	end
  end
 
- function Window:Minimize(animate)
- 	if self.Minimized then
- 		return
- 	end
+function Window:Minimize(animate)
+	if self.Minimized then
+		return
+	end
 
- 	self.Minimized = true
- 	self.RestoredSize = self.Frame.AbsoluteSize
+	-- Keep the full-size target when a restore is interrupted halfway through.
+	if not Motion.IsActive(self.Frame, "Size") then
+		self.RestoredSize = Vector2.new(self.Frame.Size.X.Offset, self.Frame.Size.Y.Offset)
+	end
+	self.SizeTransition = (self.SizeTransition or 0) + 1
+	local transition = self.SizeTransition
+	self.Minimized = true
+	if self.MinimizeIcon then
+		self.MinimizeIcon:SetGlyph("chevron_down")
+	end
+	self.Frame.ResizeGrip.Visible = false
+	if self.ActivePopup and self.ActivePopup.Hide then
+		self.ActivePopup:Hide()
+	end
 
- 	self.Sidebar.Visible = false
- 	self.Content.Visible = false
- 	self.Indicator.Visible = false
- 	self.Frame.ResizeGrip.Visible = false
+	local target = UDim2.fromOffset(self.RestoredSize.X, Config.Window.TopbarHeight)
+	Motion.Cancel(self.Frame, "Size")
+	local function finish()
+		if self.SizeTransition ~= transition or not self.Minimized or self.Destroyed then
+			return
+		end
+		self.Frame.Size = target
+		self.Sidebar.Visible = false
+		self.Content.Visible = false
+		self.Indicator.Visible = false
+	end
 
- 	local target = UDim2.new(0, self.RestoredSize.X, 0, Config.Window.TopbarHeight)
-
- 	if animate == false then
- 		self.Frame.Size = target
- 	else
- 		Motion.Curve(self.Frame, "Size", target, { Curve = "Glide", Duration = 0.32 })
- 	end
- end
+	if animate == false then
+		finish()
+	else
+		Motion.Curve(self.Frame, "Size", target, {
+			Curve = "Glide",
+			Duration = 0.24,
+			OnComplete = finish,
+		})
+	end
+end
 
  function Window:Restore(animate)
- 	if not self.Minimized then
- 		return
- 	end
+	if not self.Minimized then
+		return
+	end
 
- 	self.Minimized = false
+	self.SizeTransition = (self.SizeTransition or 0) + 1
+	local transition = self.SizeTransition
+	self.Minimized = false
+	if self.MinimizeIcon then
+		self.MinimizeIcon:SetGlyph("minus")
+	end
 
- 	self.Sidebar.Visible = true
- 	self.Content.Visible = true
- 	self.Frame.ResizeGrip.Visible = self.Options.Resizable ~= false
+	self.Sidebar.Visible = true
+	self.Content.Visible = true
+	self.Frame.ResizeGrip.Visible = self.Options.Resizable ~= false
 
- 	local size = self.RestoredSize or Vector2.new(Config.Window.Width, Config.Window.Height)
- 	local target = UDim2.fromOffset(size.X, size.Y)
+	local size = self.RestoredSize or Vector2.new(Config.Window.Width, Config.Window.Height)
+	local target = UDim2.fromOffset(size.X, size.Y)
+	Motion.Cancel(self.Frame, "Size")
+	local function finish()
+		if self.SizeTransition ~= transition or self.Minimized or self.Destroyed then
+			return
+		end
+		self.Frame.Size = target
+		self:ClampToViewport()
+		if self.ActiveTab then
+			self.ActiveTab.Scroll:Refresh()
+		end
+		self:SlideIndicator(self.ActiveTab, true)
+	end
 
- 	if animate == false then
- 		self.Frame.Size = target
- 	else
- 		Motion.Curve(self.Frame, "Size", target, { Curve = "Glide", Duration = 0.36 })
- 	end
-
- 	task.defer(function()
- 		if self.ActiveTab then
- 			self.ActiveTab.Scroll:Refresh()
- 		end
-
- 		self:SlideIndicator(self.ActiveTab)
- 	end)
- end
+	if animate == false then
+		finish()
+	else
+		Motion.Curve(self.Frame, "Size", target, {
+			Curve = "Glide",
+			Duration = 0.28,
+			OnComplete = finish,
+		})
+	end
+end
 
  function Window:SetVisible(visible)
  	self.Root.Visible = visible and true or false
@@ -5265,8 +5554,9 @@ __modules["Components/Window"] = function(script, require)
  ---------------------------------------------------------------------------
 
  --- Scales the whole shell. Useful for a resolution or comfort setting.
- function Window:SetScale(value, animate)
- 	value = math.clamp(value, 0.5, 2)
+function Window:SetScale(value, animate)
+	local viewport = self:GetViewportSize()
+	value = math.min(math.clamp(value, 0.5, 2), math.max(0.5, (viewport.X - Config.Metrics.ViewportMargin * 2) / 320))
 
  	if animate == false then
  		self.Scale.Scale = value
@@ -5436,14 +5726,14 @@ __modules["Components/Window"] = function(script, require)
  end
 
  --- Recenters the window in the viewport.
- function Window:Center(animate)
- 	local camera = workspace.CurrentCamera
- 	local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
- 	local size = self.Frame.AbsoluteSize
+function Window:Center(animate)
+	local viewport = self:GetViewportSize()
+	local size = self.Frame.AbsoluteSize
+	local scale = math.max(0.05, self.Scale.Scale)
 
- 	local target = UDim2.fromOffset(
- 		math.floor(math.max(0, (viewport.X - size.X) / 2)),
- 		math.floor(math.max(0, (viewport.Y - size.Y) / 2))
+	local target = UDim2.fromOffset(
+		math.floor(math.max(0, (viewport.X - size.X) / (2 * scale))),
+		math.floor(math.max(0, (viewport.Y - size.Y) / (2 * scale)))
  	)
 
  	if animate == false then
@@ -5525,9 +5815,11 @@ __modules["Components/Window"] = function(script, require)
 
  	self.Tooltip:Destroy()
  	self.Notifications:Destroy()
- 	self.Maid:Destroy()
- 	Motion.CancelTree(self.Root)
- 	Motion.CancelTree(self.Backdrop)
+	self.Maid:Destroy()
+	Motion.CancelTree(self.Root)
+	Motion.CancelTree(self.Backdrop)
+	Theme.UnbindTree(self.Root)
+	Theme.UnbindTree(self.Backdrop)
 
  	if self.Blur then
  		self.Blur:Destroy()
@@ -5563,7 +5855,7 @@ __modules["Core/Config"] = function(script, require)
  Config.Version = "1.0.0"
 
  Config.DefaultTheme = "Dark"
- Config.DefaultAccent = Color3.fromHex("4C8DFF")
+Config.DefaultAccent = Color3.fromHex("D8AA62")
 
  -- Layout metrics (in pixels).
  Config.Metrics = {
@@ -5576,8 +5868,8 @@ __modules["Core/Config"] = function(script, require)
  	CardPaddingY = 10,
  	CardPaddingX = 12,
  	SectionHeaderHeight = 24,
- 	SectionSpacing = 12,
- 	ScrollSpacing = 8,
+	SectionSpacing = 14,
+	ScrollSpacing = 9,
  	ScrollbarWidth = 3,
  	PopupMargin = 8,
  	PopupGap = 6,
@@ -5586,10 +5878,10 @@ __modules["Core/Config"] = function(script, require)
 
  -- Corner radii (in pixels).
  Config.Radius = {
- 	Window = 12,
- 	Card = 8,
- 	Control = 6,
- 	Small = 4,
+	Window = 9,
+	Card = 5,
+	Control = 4,
+	Small = 3,
  	Pill = 1000,
  }
 
@@ -5600,9 +5892,9 @@ __modules["Core/Config"] = function(script, require)
  	MinHeight = 340,
  	MaxWidth = 1440,
  	MaxHeight = 960,
- 	SidebarWidth = 176,
- 	TopbarHeight = 46,
- 	TabHeight = 32,
+	SidebarWidth = 168,
+	TopbarHeight = 48,
+	TabHeight = 34,
  	TabSpacing = 2,
  	SidebarPadding = 8,
  	BlurSize = 22,
@@ -5617,7 +5909,7 @@ __modules["Core/Config"] = function(script, require)
  }
 
  Config.TextSize = {
- 	Title = 16,
+	Title = 15,
  	Subtitle = 13,
  	Tab = 14,
  	Section = 12,
@@ -5642,14 +5934,14 @@ __modules["Core/Config"] = function(script, require)
  Config.Motion = {
  	Toggle = { Stiffness = 480, Damping = 26 },
  	Knob = { Stiffness = 560, Damping = 30 },
- 	Hover = { Stiffness = 700, Damping = 36 },
- 	Menu = { Stiffness = 400, Damping = 30 },
+	Hover = { Stiffness = 620, Damping = 40 },
+	Menu = { Stiffness = 460, Damping = 38 },
  	Indicator = { Stiffness = 460, Damping = 33 },
  	Collapse = { Stiffness = 360, Damping = 30 },
  	Slider = { Stiffness = 520, Damping = 34 },
  	Reveal = { Curve = "Swift", Duration = 0.42 },
  	RevealStep = 0.05,
- 	Entrance = { Curve = "Swift", Duration = 0.5 },
+	Entrance = { Curve = "Glide", Duration = 0.32 },
  }
 
  Config.Icons = {
@@ -5968,10 +6260,10 @@ __modules["Core/Element"] = function(script, require)
  		self.Description = description
  	end
 
- 	if controlWidth then
+	if controlWidth then
  		local controlCenter = (bodyHeight or hasDescription) and (paddingTop + titleHeight / 2) or height / 2
 
- 		self.Control = Util.Create("Frame", {
+		self.Control = Util.Create("Frame", {
  			Name = "Control",
  			BackgroundTransparency = 1,
  			BorderSizePixel = 0,
@@ -5979,8 +6271,29 @@ __modules["Core/Element"] = function(script, require)
  			Position = UDim2.new(1, 0, 0, controlCenter),
  			Size = UDim2.new(0, controlWidth, 0, controlHeight),
  			Parent = row,
- 		})
- 	end
+		})
+		local function fitControl()
+			if self.Destroyed then
+				return
+			end
+			local scale = math.max(0.05, self.Window.Scale.Scale)
+			local rowWidth = row.AbsoluteSize.X / scale
+			if rowWidth <= 0 then
+				return
+			end
+			local fitted = math.min(controlWidth, math.max(46, rowWidth * 0.48))
+			self.Control.Size = UDim2.fromOffset(fitted, controlHeight)
+			local remaining = -(fitted + metrics.ControlGap)
+			if self.Title then
+				self.Title.Size = UDim2.new(1, remaining, 0, titleHeight)
+			end
+			if self.Description then
+				self.Description.Size = UDim2.new(1, remaining, 0, metrics.DescriptionHeight)
+			end
+		end
+		self.Maid:Add(row:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitControl))
+		task.defer(fitControl)
+	end
 
  	if bodyHeight then
  		self.Body = Util.Create("Frame", {
@@ -6222,8 +6535,10 @@ __modules["Core/Element"] = function(script, require)
  	self.Destroyed = true
 
  	Motion.CancelAll(self)
- 	Motion.CancelTree(self.Row)
- 	Motion.CancelTree(self.Separator)
+	Motion.CancelTree(self.Row)
+	Motion.CancelTree(self.Separator)
+	Theme.UnbindTree(self.Row)
+	Theme.UnbindTree(self.Separator)
  	self.Maid:Destroy()
  	self.Changed:Destroy()
 
@@ -6258,8 +6573,14 @@ __modules["Core/Icons"] = function(script, require)
  Icons.Grid = 24
  Icons.Stroke = 2
 
- Icons.Glyphs = {
- 	activity = {
+Icons.Glyphs = {
+	-- Lumen's small instrument mark: an L and a four-way light glint.
+	lumen_mark = {
+		{ 4, 4, 4, 20, 15, 20 },
+		{ 17, 2, 17, 12 },
+		{ 12, 7, 22, 7 },
+	},
+	activity = {
  		{
  			22,
  			12,
@@ -10803,46 +11124,46 @@ __modules["Core/Theme"] = function(script, require)
 
  local PALETTES = {
  	Dark = {
- 		Window = Color3.fromHex("0F1116"),
- 		WindowGradient = Color3.fromHex("161A22"),
- 		Topbar = Color3.fromHex("12151B"),
- 		Sidebar = Color3.fromHex("0B0D12"),
- 		Surface = Color3.fromHex("171A21"),
- 		SurfaceHover = Color3.fromHex("1C2028"),
- 		Control = Color3.fromHex("1F242E"),
- 		ControlHover = Color3.fromHex("262C38"),
- 		ControlActive = Color3.fromHex("2E3543"),
- 		Outline = Color3.fromHex("262B35"),
- 		OutlineSoft = Color3.fromHex("1E222B"),
- 		Divider = Color3.fromHex("22262F"),
- 		Text = Color3.fromHex("E8EBF0"),
- 		TextMuted = Color3.fromHex("8B93A5"),
- 		TextDim = Color3.fromHex("5C6474"),
- 		Accent = Color3.fromHex("4C8DFF"),
+		Window = Color3.fromHex("151719"),
+		WindowGradient = Color3.fromHex("1B1D1E"),
+		Topbar = Color3.fromHex("191B1D"),
+		Sidebar = Color3.fromHex("111315"),
+		Surface = Color3.fromHex("1D2021"),
+		SurfaceHover = Color3.fromHex("25292A"),
+		Control = Color3.fromHex("272B2B"),
+		ControlHover = Color3.fromHex("303535"),
+		ControlActive = Color3.fromHex("383E3D"),
+		Outline = Color3.fromHex("343938"),
+		OutlineSoft = Color3.fromHex("292D2C"),
+		Divider = Color3.fromHex("2D3231"),
+		Text = Color3.fromHex("F1EEE7"),
+		TextMuted = Color3.fromHex("A6A9A3"),
+		TextDim = Color3.fromHex("727A77"),
+		Accent = Color3.fromHex("D8AA62"),
  		AccentText = Color3.fromHex("FFFFFF"),
- 		Success = Color3.fromHex("3FB950"),
- 		Warning = Color3.fromHex("D8A657"),
- 		Error = Color3.fromHex("F0616D"),
+		Success = Color3.fromHex("7CB98C"),
+		Warning = Color3.fromHex("D8AA62"),
+		Error = Color3.fromHex("D87870"),
  		Shadow = Color3.fromHex("000000"),
  	},
 
  	Light = {
- 		Window = Color3.fromHex("F4F5F8"),
- 		WindowGradient = Color3.fromHex("FFFFFF"),
- 		Topbar = Color3.fromHex("FFFFFF"),
- 		Sidebar = Color3.fromHex("ECEEF3"),
- 		Surface = Color3.fromHex("FFFFFF"),
- 		SurfaceHover = Color3.fromHex("F2F4F8"),
- 		Control = Color3.fromHex("EDEFF4"),
- 		ControlHover = Color3.fromHex("E2E6ED"),
- 		ControlActive = Color3.fromHex("D6DBE4"),
- 		Outline = Color3.fromHex("DCE0E8"),
- 		OutlineSoft = Color3.fromHex("E8EBF1"),
- 		Divider = Color3.fromHex("E6E9EF"),
- 		Text = Color3.fromHex("151920"),
- 		TextMuted = Color3.fromHex("6B7385"),
- 		TextDim = Color3.fromHex("9AA2B1"),
- 		Accent = Color3.fromHex("2F6FED"),
+		Window = Color3.fromHex("F3F0E9"),
+		WindowGradient = Color3.fromHex("FBF8F1"),
+		Topbar = Color3.fromHex("F8F5EF"),
+		Sidebar = Color3.fromHex("EAE6DD"),
+		Surface = Color3.fromHex("FCFAF5"),
+		SurfaceHover = Color3.fromHex("F3EFE6"),
+		Control = Color3.fromHex("EAE5DA"),
+		ControlHover = Color3.fromHex("E1DACD"),
+		ControlActive = Color3.fromHex("D5CDBD"),
+		Outline = Color3.fromHex("CDC6B9"),
+		OutlineSoft = Color3.fromHex("E2DBCF"),
+		Divider = Color3.fromHex("DED8CC"),
+		Text = Color3.fromHex("242722"),
+		TextMuted = Color3.fromHex("616861"),
+		TextDim = Color3.fromHex("878D83"),
+		Accent = Color3.fromHex("9B652E"),
  		AccentText = Color3.fromHex("FFFFFF"),
  		Success = Color3.fromHex("1F9D4D"),
  		Warning = Color3.fromHex("B4791A"),
@@ -10853,12 +11174,10 @@ __modules["Core/Theme"] = function(script, require)
 
  Theme.Presets = table.freeze({ "Dark", "Light" })
 
- -- `bindings` is a hash set ([binding] = true) so a binding can be removed in
- -- O(1) when its Instance is destroyed. `lookup` maps Instance -> { [property] =
- -- binding }, which is what lets the destroy path find just that instance's
- -- bindings without scanning every binding in the process.
- local bindings = {}
- local lookup = setmetatable({}, { __mode = "k" })
+	-- Weak binding keys and weak instance references prevent theme subscriptions
+	-- from retaining a GUI after it leaves the tree without an explicit Destroy.
+	local bindings = setmetatable({}, { __mode = "k" })
+	local lookup = setmetatable({}, { __mode = "k" })
 
  local function resolve(value)
  	if type(value) == "string" then
@@ -10872,14 +11191,41 @@ __modules["Core/Theme"] = function(script, require)
  	return value
  end
 
- local function applyBindings()
- 	for binding in pairs(bindings) do
- 		local value = resolve(binding.Value)
- 		if value ~= nil then
- 			binding.Instance[binding.Property] = value
- 		end
- 	end
- end
+	local function applyBindings()
+		for binding in pairs(bindings) do
+			local instance = binding.Ref[1]
+			if instance == nil then
+				bindings[binding] = nil
+				continue
+			end
+			local value = resolve(binding.Value)
+			if value ~= nil then
+				instance[binding.Property] = value
+			end
+		end
+	end
+
+	function Theme.Unbind(instance)
+		local perInstance = lookup[instance]
+		if perInstance == nil then
+			return
+		end
+		lookup[instance] = nil
+		for _, binding in pairs(perInstance) do
+			bindings[binding] = nil
+		end
+		table.clear(perInstance)
+	end
+
+	function Theme.UnbindTree(instance)
+		if instance == nil then
+			return
+		end
+		Theme.Unbind(instance)
+		for _, child in ipairs(instance:GetChildren()) do
+			Theme.UnbindTree(child)
+		end
+	end
 
  --- Keeps `property` of `instance` in sync with a palette key (or a literal).
  --- Binding the same property twice updates the existing entry, so state
@@ -10890,21 +11236,16 @@ __modules["Core/Theme"] = function(script, require)
  		perInstance = {}
  		lookup[instance] = perInstance
 
- 		instance.Destroying:Connect(function()
- 			lookup[instance] = nil
-
- 			for _, binding in pairs(perInstance) do
- 				bindings[binding] = nil
- 			end
- 			table.clear(perInstance)
- 		end)
+		instance.Destroying:Connect(function()
+			Theme.Unbind(instance)
+		end)
  	end
 
  	local binding = perInstance[property]
  	if binding then
  		binding.Value = value
  	else
- 		binding = { Instance = instance, Property = property, Value = value }
+			binding = { Ref = setmetatable({ instance }, { __mode = "v" }), Property = property, Value = value }
  		perInstance[property] = binding
  		bindings[binding] = true
  	end
@@ -10988,7 +11329,7 @@ __modules["Core/Util"] = function(script, require)
  --- Creates an Instance and applies properties in one pass. `Parent` is always
  --- applied last so layouts settle once. An optional array of Instances is
  --- parented before the properties are written.
- function Util.Create(className, properties, children)
+	function Util.Create(className, properties, children)
  	local instance = Instance.new(className)
  	local parent = nil
 
@@ -11012,8 +11353,26 @@ __modules["Core/Util"] = function(script, require)
  		instance.Parent = parent
  	end
 
- 	return instance
- end
+		return instance
+	end
+
+	-- Temporarily reserve a touch gesture for a control inside a scrolling page.
+	function Util.PauseAncestorScroll(instance)
+		local ancestor = instance.Parent
+		while ancestor and not ancestor:IsA("ScrollingFrame") do
+			ancestor = ancestor.Parent
+		end
+		if ancestor == nil then
+			return function() end
+		end
+		local wasEnabled = ancestor.ScrollingEnabled
+		ancestor.ScrollingEnabled = false
+		return function()
+			if ancestor.Parent then
+				ancestor.ScrollingEnabled = wasEnabled
+			end
+		end
+	end
 
  function Util.Corner(parent, radius)
  	return Util.Create("UICorner", {
@@ -11184,9 +11543,10 @@ __modules["Core/Util"] = function(script, require)
 
  --- Makes `target` draggable by `handle`. Both mouse and touch input are
  --- supported; movement is delta based so GUI insets never skew the result.
- function Util.AttachDrag(target, handle, options)
- 	options = options or {}
- 	local dragging = false
+function Util.AttachDrag(target, handle, options)
+	options = options or {}
+	local dragging = false
+	local activeInput = nil
  	local pointerOrigin = Vector2.zero
  	local positionOrigin = Vector2.zero
  	local moveConnection = nil
@@ -11198,8 +11558,9 @@ __modules["Core/Util"] = function(script, require)
  		return camera and camera.ViewportSize or Vector2.new(1280, 720)
  	end
 
- 	local function stopDragging()
- 		dragging = false
+	local function stopDragging()
+		dragging = false
+		activeInput = nil
  		if moveConnection then
  			moveConnection:Disconnect()
  			moveConnection = nil
@@ -11212,22 +11573,29 @@ __modules["Core/Util"] = function(script, require)
  		end
 
  		local inputType = input.UserInputType
- 		if inputType ~= Enum.UserInputType.MouseMovement and inputType ~= Enum.UserInputType.Touch then
- 			return
- 		end
+		if inputType ~= Enum.UserInputType.MouseMovement and inputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		if inputType == Enum.UserInputType.Touch and input ~= activeInput then
+			return
+		end
 
  		local pointer = Vector2.new(input.Position.X, input.Position.Y)
- 		local delta = pointer - pointerOrigin
- 		local position = positionOrigin + delta
+		local scale = math.max(0.05, options.Scale and options.Scale() or 1)
+		local delta = (pointer - pointerOrigin) / scale
+		local position = positionOrigin + delta
 
  		if options.Clamp ~= false then
- 			local viewport = viewportSize()
- 			local scale = options.Scale and options.Scale() or 1
- 			local size = target.AbsoluteSize
- 			local titlebar = (options.TitlebarHeight or 0) * scale
- 			local visibleTitlebar = math.min(size.X, (options.MinimumVisibleTitlebar or 0) * scale)
- 			local minimum = Vector2.new(visibleTitlebar - size.X, 0)
- 			local maximum = Vector2.new(viewport.X - visibleTitlebar, math.max(0, viewport.Y - titlebar))
+			local viewport = options.ViewportSize and options.ViewportSize() or viewportSize()
+			local size = target.AbsoluteSize / scale
+			local titlebar = options.TitlebarHeight or 0
+			local visibleTitlebar = math.min(size.X, options.MinimumVisibleTitlebar or 0)
+			local fullyVisible = options.KeepFullyVisible and options.KeepFullyVisible()
+			local minimum = Vector2.new(fullyVisible and 0 or visibleTitlebar - size.X, 0)
+			local maximum = Vector2.new(
+				fullyVisible and math.max(0, viewport.X / scale - size.X) or viewport.X / scale - visibleTitlebar,
+				fullyVisible and math.max(0, viewport.Y / scale - size.Y) or math.max(0, viewport.Y / scale - titlebar)
+			)
  			position =
  				Vector2.new(Util.Clamp(position.X, minimum.X, maximum.X), Util.Clamp(position.Y, minimum.Y, maximum.Y))
  		end
@@ -11245,13 +11613,17 @@ __modules["Core/Util"] = function(script, require)
  			return
  		end
 
- 		local inputType = input.UserInputType
- 		if inputType ~= Enum.UserInputType.MouseButton1 and inputType ~= Enum.UserInputType.Touch then
- 			return
- 		end
+		local inputType = input.UserInputType
+		if inputType ~= Enum.UserInputType.MouseButton1 and inputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		if options.Ignore and options.Ignore(Vector2.new(input.Position.X, input.Position.Y)) then
+			return
+		end
 
- 		dragging = true
- 		pointerOrigin = Vector2.new(input.Position.X, input.Position.Y)
+		dragging = true
+		activeInput = input
+		pointerOrigin = Vector2.new(input.Position.X, input.Position.Y)
  		positionOrigin = Vector2.new(target.Position.X.Offset, target.Position.Y.Offset)
 
  		if options.OnDragStart then
@@ -11275,16 +11647,20 @@ __modules["Core/Util"] = function(script, require)
  		end
  	end
 
- 	local endedConnection = handle.InputEnded:Connect(function(input)
- 		local inputType = input.UserInputType
- 		if inputType == Enum.UserInputType.MouseButton1 or inputType == Enum.UserInputType.Touch then
+	local endedConnection = handle.InputEnded:Connect(function(input)
+		local inputType = input.UserInputType
+		if activeInput and ((inputType == Enum.UserInputType.MouseButton1
+			and activeInput.UserInputType == Enum.UserInputType.MouseButton1)
+			or input == activeInput) then
  			finishDragging()
  		end
  	end)
 
- 	local releaseConnection = userInputService.InputEnded:Connect(function(input)
- 		local inputType = input.UserInputType
- 		if inputType == Enum.UserInputType.MouseButton1 or inputType == Enum.UserInputType.Touch then
+	local releaseConnection = userInputService.InputEnded:Connect(function(input)
+		local inputType = input.UserInputType
+		if activeInput and ((inputType == Enum.UserInputType.MouseButton1
+			and activeInput.UserInputType == Enum.UserInputType.MouseButton1)
+			or input == activeInput) then
  			finishDragging()
  		end
  	end)
@@ -11298,9 +11674,10 @@ __modules["Core/Util"] = function(script, require)
  end
 
  --- Makes `target` resizable by `handle`, growing towards the bottom right.
- function Util.AttachResize(target, handle, options)
- 	options = options or {}
- 	local resizing = false
+function Util.AttachResize(target, handle, options)
+	options = options or {}
+	local resizing = false
+	local activeInput = nil
  	local pointerOrigin = Vector2.zero
  	local sizeOrigin = Vector2.zero
  	local moveConnection = nil
@@ -11309,8 +11686,9 @@ __modules["Core/Util"] = function(script, require)
  	local minimum = options.Minimum or Vector2.new(360, 240)
  	local maximum = options.Maximum or Vector2.new(1440, 960)
 
- 	local function stopResizing()
- 		resizing = false
+	local function stopResizing()
+		resizing = false
+		activeInput = nil
  		if moveConnection then
  			moveConnection:Disconnect()
  			moveConnection = nil
@@ -11323,9 +11701,12 @@ __modules["Core/Util"] = function(script, require)
  		end
 
  		local inputType = input.UserInputType
- 		if inputType ~= Enum.UserInputType.MouseMovement and inputType ~= Enum.UserInputType.Touch then
- 			return
- 		end
+		if inputType ~= Enum.UserInputType.MouseMovement and inputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		if inputType == Enum.UserInputType.Touch and input ~= activeInput then
+			return
+		end
 
  		local pointer = Vector2.new(input.Position.X, input.Position.Y)
  		-- Deltas arrive in screen pixels; the shell may be scaled by a UIScale.
@@ -11346,16 +11727,20 @@ __modules["Core/Util"] = function(script, require)
  		end
  	end
 
- 	handle.Active = true
- 	local beganConnection = handle.InputBegan:Connect(function(input)
- 		local inputType = input.UserInputType
+	handle.Active = true
+	local beganConnection = handle.InputBegan:Connect(function(input)
+		if resizing then
+			return
+		end
+		local inputType = input.UserInputType
  		if inputType ~= Enum.UserInputType.MouseButton1 and inputType ~= Enum.UserInputType.Touch then
  			return
  		end
 
- 		resizing = true
+		resizing = true
+		activeInput = input
  		pointerOrigin = Vector2.new(input.Position.X, input.Position.Y)
- 		sizeOrigin = target.AbsoluteSize
+		sizeOrigin = Vector2.new(target.Size.X.Offset, target.Size.Y.Offset)
 
  		if options.OnResizeStart then
  			options.OnResizeStart()
@@ -11373,7 +11758,9 @@ __modules["Core/Util"] = function(script, require)
  		end
 
  		local inputType = input.UserInputType
- 		if inputType == Enum.UserInputType.MouseButton1 or inputType == Enum.UserInputType.Touch then
+		if activeInput and ((inputType == Enum.UserInputType.MouseButton1
+			and activeInput.UserInputType == Enum.UserInputType.MouseButton1)
+			or input == activeInput) then
  			stopResizing()
  			if options.OnResizeEnd then
  				options.OnResizeEnd()
