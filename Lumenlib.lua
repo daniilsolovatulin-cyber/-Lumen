@@ -2927,20 +2927,7 @@ __modules["Components/Section"] = function(script, require)
  			TextTruncate = Enum.TextTruncate.AtEnd,
  			Parent = header,
  		})
-	Theme.Bind(label, "TextColor3", "TextMuted")
-	local compactLetter = Util.Create("TextLabel", {
-		Name = "CompactLetter",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundTransparency = 1,
-		Font = Config.Font.Bold,
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromOffset(28, 28),
-		Text = string.upper(string.sub(self.Name, 1, 1)),
-		TextSize = Config.TextSize.Tab,
-		Visible = false,
-		Parent = content,
-	})
-	Theme.Bind(compactLetter, "TextColor3", "TextMuted")
+		Theme.Bind(label, "TextColor3", "TextMuted")
 
  		local chevron = Icon.new(header, "chevron-down", Config.Icons.ChevronSize, "TextDim")
  		chevron.Container.AnchorPoint = Vector2.new(1, 0.5)
@@ -3706,11 +3693,24 @@ __modules["Components/Tab"] = function(script, require)
  		TextSize = Config.TextSize.Tab,
  		TextXAlignment = Enum.TextXAlignment.Left,
  		TextTruncate = Enum.TextTruncate.AtEnd,
- 		Parent = content,
- 	})
- 	Theme.Bind(label, "TextColor3", "TextMuted")
+		Parent = content,
+	})
+	Theme.Bind(label, "TextColor3", "TextMuted")
+	local compactLetter = Util.Create("TextLabel", {
+		Name = "CompactLetter",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		BackgroundTransparency = 1,
+		Font = Config.Font.Bold,
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(28, 28),
+		Text = string.upper(string.sub(self.Name, 1, 1)),
+		TextSize = Config.TextSize.Tab,
+		Visible = false,
+		Parent = content,
+	})
+	Theme.Bind(compactLetter, "TextColor3", "TextMuted")
 
- 	local page = Util.Create("CanvasGroup", {
+	local page = Util.Create("CanvasGroup", {
  		Name = "TabPage",
  		BackgroundTransparency = 1,
  		BorderSizePixel = 0,
